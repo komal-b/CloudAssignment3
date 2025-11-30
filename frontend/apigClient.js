@@ -86,12 +86,12 @@ apigClientFactory.newClient = function (config) {
     apigClient.photosPut = function (params, body, additionalParams) {
         if(additionalParams === undefined) { additionalParams = {}; }
         
-        apiGateway.core.utils.assertParametersDefined(params, ['objectKey', 'x-amz-meta-customLabels', 'Content-Type'], ['body']);
+        apiGateway.core.utils.assertParametersDefined(params, ['objectKey', 'Content-Type', 'x-amz-meta-customLabels'], ['body']);
         
         var photosPutRequest = {
             verb: 'put'.toUpperCase(),
             path: pathComponent + uritemplate('/photos').expand(apiGateway.core.utils.parseParametersToObject(params, [])),
-            headers: apiGateway.core.utils.parseParametersToObject(params, ['x-amz-meta-customLabels', 'Content-Type']),
+            headers: apiGateway.core.utils.parseParametersToObject(params, ['Content-Type', 'x-amz-meta-customLabels']),
             queryParams: apiGateway.core.utils.parseParametersToObject(params, ['objectKey', ]),
             body: body
         };
