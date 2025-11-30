@@ -83,39 +83,39 @@ apigClientFactory.newClient = function (config) {
     
     
     
-    apigClient.photosPut = function (params, body, additionalParams) {
+    apigClient.photosObjectKeyPut = function (params, body, additionalParams) {
         if(additionalParams === undefined) { additionalParams = {}; }
         
         apiGateway.core.utils.assertParametersDefined(params, ['objectKey', 'Content-Type', 'x-amz-meta-customLabels'], ['body']);
         
-        var photosPutRequest = {
+        var photosObjectKeyPutRequest = {
             verb: 'put'.toUpperCase(),
-            path: pathComponent + uritemplate('/photos').expand(apiGateway.core.utils.parseParametersToObject(params, [])),
+            path: pathComponent + uritemplate('/photos/{objectKey}').expand(apiGateway.core.utils.parseParametersToObject(params, ['objectKey', ])),
             headers: apiGateway.core.utils.parseParametersToObject(params, ['Content-Type', 'x-amz-meta-customLabels']),
-            queryParams: apiGateway.core.utils.parseParametersToObject(params, ['objectKey', ]),
+            queryParams: apiGateway.core.utils.parseParametersToObject(params, []),
             body: body
         };
         
         
-        return apiGatewayClient.makeRequest(photosPutRequest, authType, additionalParams, config.apiKey);
+        return apiGatewayClient.makeRequest(photosObjectKeyPutRequest, authType, additionalParams, config.apiKey);
     };
     
     
-    apigClient.photosOptions = function (params, body, additionalParams) {
+    apigClient.photosObjectKeyOptions = function (params, body, additionalParams) {
         if(additionalParams === undefined) { additionalParams = {}; }
         
         apiGateway.core.utils.assertParametersDefined(params, [], ['body']);
         
-        var photosOptionsRequest = {
+        var photosObjectKeyOptionsRequest = {
             verb: 'options'.toUpperCase(),
-            path: pathComponent + uritemplate('/photos').expand(apiGateway.core.utils.parseParametersToObject(params, [])),
+            path: pathComponent + uritemplate('/photos/{objectKey}').expand(apiGateway.core.utils.parseParametersToObject(params, [])),
             headers: apiGateway.core.utils.parseParametersToObject(params, []),
             queryParams: apiGateway.core.utils.parseParametersToObject(params, []),
             body: body
         };
         
         
-        return apiGatewayClient.makeRequest(photosOptionsRequest, authType, additionalParams, config.apiKey);
+        return apiGatewayClient.makeRequest(photosObjectKeyOptionsRequest, authType, additionalParams, config.apiKey);
     };
     
     

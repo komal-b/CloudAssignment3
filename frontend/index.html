@@ -134,7 +134,7 @@ async function uploadPhoto() {
         // Call the SDK method for PUT /photos/{objectKey}
         // NOTE: The exact method name might vary (e.g., photosPut or photosObjectKeyPut)
         // based on your Swagger file, but 'photosObjectKeyPut' is typical for a path param.
-        const response = await apigClient.photosPut(pathParams, body, additionalParams);
+        const response = await apigClient.photosObjectKeyPut(pathParams, body, additionalParams);
 
         if (response.status === 200) {
             statusEl.textContent = "✅ Uploaded successfully! (Status: " + response.status + ")";
