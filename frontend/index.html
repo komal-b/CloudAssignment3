@@ -56,7 +56,13 @@
             // Params matches SDK: ['q']
             var params = { 'q': query };
             var body = {};
-            var additionalParams = {};
+            var additionalParams = {
+                headers: {
+                "x-amz-meta-customLabels": customLabels,
+                // Make sure this is correctly retrieving the file type
+                "Content-Type": file.type || "application/octet-stream"
+                }
+            };
 
             sdkClient.searchGet(params, body, additionalParams)
                 .then(function(result) {
