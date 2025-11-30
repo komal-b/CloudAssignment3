@@ -6,12 +6,12 @@ phases:
       - echo "Starting deployment of Lambda functions..."
 
       # --- Deployment for LF1: index-photos --
-      - cd ..
+    
       - aws lambda update-function-code --function-name index-photos --zip-file fileb://index-photos.zip --publish
 
       # --- Deployment for LF2: search-photos ---
-      - echo "Zipping and deploying search-photos..."
-      - cd ..
+   
+
       - aws lambda update-function-code --function-name search-photos --zip-file fileb://search-photos.zip --publish
 
   post_build:
