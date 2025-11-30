@@ -1,0 +1,24 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - echo "Starting deployment of Lambda functions..."
+
+      # --- Deployment for LF1: index-photos ---
+      - echo "Zipping and deploying index-photos..."
+      - cd index-photos-folder
+      - zip -r ../index-photos.zip .
+      - cd ..
+      - aws lambda update-function-code --function-name index-photos --zip-file fileb://index-photos.zip --publish
+
+      # --- Deployment for LF2: search-photos ---
+      - echo "Zipping and deploying search-photos..."
+      - cd search-photos-folder
+      - zip -r ../search-photos.zip .
+      - cd ..
+      - aws lambda update-function-code --function-name search-photos --zip-file fileb://search-photos.zip --publish
+
+  post_build:
+    commands:
+      - echo "Backend Lambda deployment complete."
