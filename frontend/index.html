@@ -37,14 +37,14 @@
     <script type="text/javascript" src="lib/apiGatewayCore/simpleHttpClient.js"></script>
     <script type="text/javascript" src="lib/apiGatewayCore/utils.js"></script>
     
-    <script type="text/javascript" src="apigClient.js"></script>
+    <script type="text/javascript" src="https://0c3wyr8vn3.execute-api.us-east-1.amazonaws.com/prod"></script>
 
     <script>
         // ==========================================
         //  ⚠️ INITIALIZE SDK CLIENT
         // ==========================================
         var sdkClient = apigClientFactory.newClient({
-            apiKey: 'nSNWwJJNkf5LAip0QnvbF7nm1W69NXly17tjDy26' // <--- PASTE HER API KEY HERE
+            apiKey: 'nSNWwJJNkf5LAip0QnvbF7nm1W69NXly17tjDy26' // <--- YOUR API KEY
         });
         // ==========================================
 
@@ -56,17 +56,11 @@
             // Params matches SDK: ['q']
             var params = { 'q': query };
             var body = {};
-            var additionalParams = {
-                headers: {
-                "x-amz-meta-customLabels": customLabels,
-                // Make sure this is correctly retrieving the file type
-                "Content-Type": file.type || "application/octet-stream"
-                }
-            };
+            var additionalParams = {};
 
             sdkClient.searchGet(params, body, additionalParams)
                 .then(function(result) {
-                    var data = result.data;
+                    var data = result.data.results || []; // Use .results assuming Lambda returns { results: [...] }
                     resultsDiv.innerHTML = "";
                     if (!data || data.length === 0) {
                         resultsDiv.innerHTML = '<p class="empty-state">No photos found.</p>';
@@ -95,23 +89,21 @@
             btn.innerText = "Uploading...";
             btn.disabled = true;
 
-            // FIX: Match the SDK definition for 'photosObjectKeyPut'
-            // The SDK requires 'Content-Type' and 'x-amz-meta-customLabels' in the PARAMS object.
+            // CORRECT: Pass Content-Type and custom headers in the PARAMS object, as required by the SDK.
             var params = {
                 'objectKey': file.name, // Matched to SDK path: /photos/{objectKey}
                 'Content-Type': file.type || 'application/octet-stream',
-                'x-amz-meta-customLabels': customLabels
+                'x-amz-meta-customlabels': customLabels // Note: SDK converts this to 'x-amz-meta-customlabels' header
             };
             
-            var body = file;
+            var body = file; // Raw file object (the binary data)
             var additionalParams = {};
 
-            // FIX: Using the correct method name from her apigClient.js
             sdkClient.photosObjectKeyPut(params, body, additionalParams)
                 .then(function(result) {
                     btn.innerText = "Upload to Album";
                     btn.disabled = false;
-                    alert("✅ Upload Successful!");
+                    alert("✅ Upload Successful! Metadata is being processed.");
                     document.getElementById('fileInput').value = '';
                     document.getElementById('customLabels').value = '';
                 })
@@ -120,7 +112,6 @@
                     btn.innerText = "Upload to Album";
                     btn.disabled = false;
                     
-                    // Detailed Error logging
                     var msg = "Upload Failed.";
                     if(error.response) { msg += " Status: " + error.response.status; }
                     alert(msg);
