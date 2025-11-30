@@ -1,19 +1,19 @@
 version: 0.2
-
 phases:
   build:
     commands:
-      - echo "Starting deployment of Lambda functions..."
-
-      # --- Deployment for LF1: index-photos --
-    
+      - echo "Packaging Lambda code..."
+      
+      # FIX 1: Zip index.py to the REQUIRED ARTIFACT NAME (index-photos.zip)
+      - zip -r index-photos.zip index.py
+      
+      # FIX 2: Zip lambda_function.py to the REQUIRED ARTIFACT NAME (search-photos.zip)
+      - zip -r search-photos.zip lambda_function.py
+      
+      - echo "Deploying Lambda code..."
+      
+      # Deploy LF1: index-photos
       - aws lambda update-function-code --function-name index-photos --zip-file fileb://index-photos.zip --publish
-
-      # --- Deployment for LF2: search-photos ---
-   
-
+      
+      # Deploy LF2: search-photos
       - aws lambda update-function-code --function-name search-photos --zip-file fileb://search-photos.zip --publish
-
-  post_build:
-    commands:
-      - echo "Backend Lambda deployment complete."
