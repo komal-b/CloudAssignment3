@@ -1,0 +1,153 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Photo Search</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body{font-family:system-ui,Arial;margin:24px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}
+    .card{border:1px solid #ddd;border-radius:8px;padding:8px}
+    img{max-width:100%;border-radius:6px}
+    label{display:block;margin:.5rem 0 .25rem}
+    input,button{padding:.5rem}
+  </style>
+  <script type="text/javascript" src="lib/axios/dist/axios.standalone.js"></script>
+<script type="text/javascript" src="lib/url-template/url-template.js"></script>
+<script type="text/javascript" src="lib/apiGatewayCore/sigV4Client.js"></script>
+<script type="text/javascript" src="lib/apiGatewayCore/apiGatewayClient.js"></script>
+<script type="text/javascript" src="lib/apiGatewayCore/simpleHttpClient.js"></script>
+<script type="text/javascript" src="lib/apiGatewayCore/utils.js"></script>
+<script type="text/javascript" src="apigClient.js"></script>
+</head>
+<body>
+  <h1>Photo Search</h1>
+
+  <!-- SEARCH -->
+  <section class="card">
+    <label>Search query</label>
+    <input id="q" placeholder="e.g., cats, show me dogs and parks" size="40" />
+    <button onclick="searchPhotos()">Search</button>
+    <div id="results" class="grid"></div>
+  </section>
+
+  <!-- UPLOAD -->
+  <section class="card" style="margin-top:16px">
+    <label>Choose photo</label>
+    <input id="file" type="file" accept="image/*" />
+    <label>Custom labels (comma-separated)</label>
+    <input id="labels" placeholder="Sam, Sally" size="40" />
+    <label>Destination key (filename in bucket)</label>
+    <input id="objKey" placeholder="my-photo.jpg" size="40" />
+    <button onclick="uploadPhoto()">Upload</button>
+    <div id="uploadStatus"></div>
+  </section>
+
+<script>
+const API_KEY = "___API_GATEWAY_KEY_PLACEHOLDER___";;
+
+// Example endpoints (adjust to your deployment):
+// GET /search?q=...
+const SEARCH_URL = "https://0c3wyr8vn3.execute-api.us-east-1.amazonaws.com/prod/search";
+// S3 Proxy for PUT /photos (map to your method/path)
+const S3_PUT_URL = "https://0c3wyr8vn3.execute-api.us-east-1.amazonaws.com/prod/photos";
+
+// Your storage bucket (B2) where images live
+const PHOTOS_BUCKET = "b2-tps7866-knb4003";
+const S3_PUBLIC_BASE = `https://${PHOTOS_BUCKET}.s3.amazonaws.com`; // or your CloudFront URL if you have one
+
+// Initialize the SDK Client
+// The 'apigClientFactory' is loaded from the 'apigClient.js' file above
+const apigClient = apigClientFactory.newClient({
+    apiKey: API_KEY,
+    // Note: The SDK typically infers the base URL from the apigClient.js file
+    // which contains the endpoint config from the swagger definition.
+});
+
+async function searchPhotos() {
+    const q = document.getElementById('q').value.trim();
+    if (!q) { return; }
+
+    const params = { q: q };
+    const body = {};
+    const additionalParams = {}; // SDK handles the API Key from initialization
+
+    let data;
+    try {
+        // Call the SDK method for GET /search
+        const response = await apigClient.searchGet(params, body, additionalParams);
+        data = response.data;
+    } catch (error) {
+        alert("Search failed: " + (error.data ? error.data.message : error.statusText));
+        return;
+    }
+
+    // Display Results (unchanged logic)
+    const resultsDiv = document.getElementById('results');
+    resultsDiv.innerHTML = "";
+    (data.results || data || []).forEach(item => {
+        const bucket = item.bucket || PHOTOS_BUCKET;
+        const key = item.objectKey;
+        const imgUrl = `${S3_PUBLIC_BASE}/${encodeURIComponent(key)}`;
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<img src="${imgUrl}" alt="${key}" /><div>${key}</div>`;
+        resultsDiv.appendChild(div);
+    });
+}
+
+async function uploadPhoto() {
+    const fileEl = document.getElementById('file');
+    const labelsEl = document.getElementById('labels');
+    const keyEl = document.getElementById('objKey');
+    const statusEl = document.getElementById('uploadStatus');
+
+    const file = fileEl.files[0];
+    const customLabels = labelsEl.value.trim();
+    const objectKey = (keyEl.value || (file ? file.name : "")).trim();
+
+    if (!file || !objectKey) {
+        alert("Pick a file and provide an object key.");
+        return;
+    }
+
+    statusEl.textContent = "Uploading...";
+
+    const pathParams = {
+        // NOTE: If your API path is just PUT /photos, you might need to adjust
+        // but typically the S3 proxy is configured to use {objectKey}
+        objectKey: objectKey
+    };
+
+    const body = file; // The actual file binary content
+    
+    const additionalParams = {
+        headers: {
+            // This header is mandatory for the assignment:
+            "x-amz-meta-customLabels": customLabels,
+            // Pass the Content-Type, which the SDK will use
+            "Content-Type": file.type || "application/octet-stream" 
+        }
+    };
+
+    try {
+        // Call the SDK method for PUT /photos/{objectKey}
+        // NOTE: The exact method name might vary (e.g., photosPut or photosObjectKeyPut)
+        // based on your Swagger file, but 'photosObjectKeyPut' is typical for a path param.
+        const response = await apigClient.photosObjectKeyPut(pathParams, body, additionalParams);
+
+        if (response.status === 200) {
+            statusEl.textContent = "✅ Uploaded successfully! (Status: " + response.status + ")";
+        } else {
+            // Handle non-200 responses if they are not thrown as exceptions
+            statusEl.textContent = "❌ Upload failed: Received status " + response.status;
+        }
+
+    } catch (error) {
+        console.error(error);
+        statusEl.textContent = "❌ Upload failed: " + (error.data ? error.data.message : "Network or configuration error.");
+    }
+}
+</script>
+</body>
+</html>

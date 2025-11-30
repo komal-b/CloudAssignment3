@@ -1,0 +1,16 @@
+version: 0.2
+
+phases:
+  build:
+    commands:
+      - echo "Starting frontend build and API Key injection..."
+      
+      # Inject the API key from the CodeBuild environment variable into index.html
+      - sed -i "s|___API_GATEWAY_KEY_PLACEHOLDER___|$API_GATEWAY_KEY|g" index.html
+      
+  post_build:
+    commands:
+      - echo "Syncing files to S3 bucket B1..."
+      # Deploy the modified files to the S3 bucket.
+      - aws s3 sync . s3://b1-tps7866-knb4003 --delete
+      - echo "Frontend deployment complete."
