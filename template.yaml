@@ -1,0 +1,321 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Assignment 3 - Photo Album Stack (Simplified for Part 7)
+
+Parameters:
+  BucketNameSuffix:
+    Type: String
+    Description: Suffix for globally unique bucket names (e.g., 'jdoe-fall2025').
+
+Resources:
+  # --------------------------------------------------------------------------
+  # 1. S3 BUCKETS (B1 and B2)
+  # --------------------------------------------------------------------------
+
+  # B2: Bucket for storing photos and triggering the indexing Lambda
+  PhotosStorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "photos-storage-${BucketNameSuffix}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+      # Access policy to allow public read access for the frontend to display images
+      BucketPolicy:
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PublicReadAccess
+              Effect: Allow
+              Principal: "*"
+              Action: "s3:GetObject"
+              Resource: !Sub "arn:aws:s3:::photos-storage-${BucketNameSuffix}/*"
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:Put
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .jpg
+            Function: !GetAtt IndexPhotosFunction.Arn
+
+  # B1: Bucket for hosting the frontend website
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "photo-frontend-${BucketNameSuffix}"
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false # Required for website hosting
+        RestrictPublicBuckets: false # Required for website hosting
+
+  # Bucket Policy for Frontend to allow public read access
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: "Logs are not required for a static website bucket."
+    
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadForWebsite
+            Effect: Allow
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "arn:aws:s3:::${FrontendBucket}/*"
+
+  # --------------------------------------------------------------------------
+  # 2. IAM ROLES (Permissions)
+  # --------------------------------------------------------------------------
+  
+  # Role for index-photos (LF1): S3, Rekognition, CloudWatch Logs
+  IndexPhotosRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: IndexPhotosPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:HeadObject'
+                Resource: !Sub 'arn:aws:s3:::${PhotosStorageBucket}/*'
+              - Effect: Allow
+                Action:
+                  - 'rekognition:DetectLabels'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'es:ESHttpPost' # For writing to OpenSearch (though OS is manual)
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+
+  # Role for search-photos (LF2): Lex, OpenSearch, CloudWatch Logs
+  SearchPhotosRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: SearchPhotosPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lex:PostText'
+                  - 'lex:RecognizeText'
+                Resource: '*' # Lex requires a broad policy
+              - Effect: Allow
+                Action:
+                  - 'es:ESHttpGet' # For searching OpenSearch
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+
+  # --------------------------------------------------------------------------
+  # 3. LAMBDA FUNCTIONS (LF1 and LF2)
+  # --------------------------------------------------------------------------
+
+  # LF1: Image Indexing Lambda (index-photos)
+  IndexPhotosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: index-photos
+      Handler: index.lambda_handler
+      Runtime: python3.9 # Use a standard runtime
+      Timeout: 60
+      MemorySize: 256
+      CodeUri: s3://b2-tps7866-knb4003/index.py # Replace with your packaged code location
+      Role: !GetAtt IndexPhotosRole.Arn
+
+  # LF2: Search Lambda (search-photos)
+  SearchPhotosFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: search-photos
+      Handler: search_photos.lambda_handler
+      Runtime: python3.9
+      Timeout: 29 # Ensure this is less than API Gateway's 30s timeout
+      MemorySize: 256
+      CodeUri: s3://b2-tps7866-knb4003/lambda.py # Replace with your packaged code location
+      Role: !GetAtt SearchPhotosRole.Arn
+      # Environment variables for the search function
+      Environment:
+        Variables:
+          OPENSEARCH_ENDPOINT: 'https://search-photos-chfxoff4axxmpqipibsb4ghrqq.us-east-1.es.amazonaws.com' # Replace with your actual endpoint
+          LEX_BOT_ID: 'MDTAQLTEIB'
+          LEX_BOT_ALIAS_ID: 'TSTALIASID'
+          LEX_LOCALE_ID: 'en_US'
+
+  # --------------------------------------------------------------------------
+  # 4. API GATEWAY (Routes and Integrations)
+  # --------------------------------------------------------------------------
+
+  # Define the API Gateway
+  PhotoSearchApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      # The API Key is defined in the Method properties below
+      DefinitionBody:
+        swagger: 2.0
+        info:
+          title: !Ref 'AWS::StackName'
+        paths:
+          # GET /search?q={query text} to Lambda (LF2)
+          /search:
+            get:
+              produces:
+                - application/json
+              parameters:
+                - name: q
+                  in: query
+                  required: true
+                  type: string
+              x-amazon-apigateway-integration:
+                type: aws_proxy
+                httpMethod: POST
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SearchPhotosFunction.Arn}/invocations'
+                passthroughBehavior: WHEN_NO_MATCH
+              security:
+                - api_key: []
+
+          # PUT /photos to S3 Proxy Integration
+          /photos:
+            put:
+              consumes:
+                - application/json
+                - application/xml
+              produces:
+                - application/json
+              x-amazon-apigateway-integration:
+                type: aws
+                integrationHttpMethod: PUT
+                uri: !Sub 'arn:aws:apigateway:${AWS::Region}:s3:path/${PhotosStorageBucket}'
+                credentials: !GetAtt ApiGatewayS3Role.Arn
+                requestParameters:
+                  integration.request.header.Content-Type: method.request.header.Content-Type
+                  integration.request.header.x-amz-meta-customLabels: method.request.header.x-amz-meta-customLabels
+                requestTemplates:
+                  application/json: 'Action=PutObject&Bucket=${PhotosStorageBucket}&Key=$input.params(''objectKey'')'
+              parameters:
+                - name: Content-Type
+                  in: header
+                  required: true
+                  type: string
+                - name: x-amz-meta-customLabels
+                  in: header
+                  required: false
+                  type: string
+              security:
+                - api_key: []
+
+  # API Key Definition
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: PhotoSearchApiKey
+      Enabled: true
+      StageKeys:
+        - RestApiId: !Ref PhotoSearchApi
+          StageName: prod
+
+  # Usage Plan to associate the API Key with the API Stage
+  ApiUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: PhotoSearchUsagePlan
+      ApiStages:
+        - ApiId: !Ref PhotoSearchApi
+          Stage: prod
+      ApiKeys:
+        - KeyId: !Ref ApiKey
+          KeyType: 'API_KEY'
+
+  # Role for API Gateway to interact with S3 for the /photos PUT endpoint
+  ApiGatewayS3Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: ApiGatewayS3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:aws:s3:::${PhotosStorageBucket}/*'
+
+  # --------------------------------------------------------------------------
+  # 5. PERMISSIONS (S3 trigger for Lambda)
+  # --------------------------------------------------------------------------
+
+  # Permission for S3 to invoke the IndexPhotosFunction (LF1)
+  S3LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt IndexPhotosFunction.Arn
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt PhotosStorageBucket.Arn
+
+Outputs:
+  # The public URL of the S3-hosted frontend bucket
+  FrontendURL:
+    Description: 'The URL of the photo search application (S3 Static Website Hosting)'
+    Value: !GetAtt FrontendBucket.WebsiteURL
+    Export:
+      Name: !Sub '${AWS::StackName}-FrontendURL'
+
+  ApiGatewayURL:
+    Description: 'API Gateway Invoke URL'
+    Value: !Sub 'https://${PhotoSearchApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+    Export:
+      Name: !Sub '${AWS::StackName}-ApiGatewayURL'
