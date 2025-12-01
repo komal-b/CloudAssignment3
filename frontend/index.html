@@ -226,10 +226,18 @@
                 return response.json();
             })
             .then(data => {
-                // Handle response format (assumes API returns an array of photo objects with 'url' property)
-                const photos = data.results || data; 
-                
                 resultsDiv.innerHTML = "";
+                let photos = [];
+                    // Handle response format (assumes API returns an array of photo objects with 'url' property)
+                if (data && data.results && Array.isArray(data.results)) {
+                // Expected successful format from Lambda Proxy Integration
+                    photos = data.results;
+                } else if (data && Array.isArray(data)) {
+                // Fallback for flat array response
+                photos = data;
+            }
+                
+                
                 if (!photos || photos.length === 0) {
                     resultsDiv.innerHTML = '<p class="empty-state">No photos found matching your query.</p>';
                     return;
